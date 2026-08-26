@@ -132,13 +132,14 @@ Update the hard-coded Colab paths, such as `/content/drive/My Drive/IDX Exchange
 
 Run the notebooks in the following order:
 
-1. `02_preprocessing_categorical_to_numerical(2).ipynb`
-2. `03_baseline_model.ipynb`
-3. `04_model_comparison(1).ipynb`
-4. `03_baseline_model_updated.ipynb`
-5. `04_model_comparison_updated(2).ipynb`
-6. `05_advanced_models(3).ipynb`
-7. `06_evaluation(1).ipynb`
+1. `01_exploration.ipynb`
+2. `02_preprocessing_categorical_to_numerical.ipynb`
+3. `03_baseline_model.ipynb`
+4. `04_model_comparison.ipynb`
+5. `03_baseline_model_updated.ipynb`
+6. `04_model_comparison_updated.ipynb`
+7. `05_advanced_models.ipynb`
+8. `06_evaluation.ipynb`
 
 For local Jupyter:
 
