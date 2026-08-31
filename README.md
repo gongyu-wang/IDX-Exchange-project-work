@@ -102,13 +102,13 @@ XGBoost has its lowest MAPE in the $750K-$1M segment. Percentage error is highes
 
 | File | Purpose |
 |---|---|
-| `02_preprocessing_categorical_to_numerical(2).ipynb` | Loads monthly raw files, filters properties, converts categorical/binary fields, and prepares dates. |
+| `02_preprocessing_categorical_to_numerical.ipynb` | Loads monthly raw files, filters properties, converts categorical/binary fields, and prepares dates. |
 | `03_baseline_model.ipynb` | Trains and evaluates the original Linear Regression baseline. |
 | `03_baseline_model_updated.ipynb` | Re-runs the baseline after Week 6 feature engineering. |
-| `04_model_comparison(1).ipynb` | Compares the original Linear Regression, Decision Tree, and Random Forest models. |
-| `04_model_comparison_updated(2).ipynb` | Re-runs the three-model comparison with the updated feature set and time split. |
-| `05_advanced_models(3).ipynb` | Trains and manually tunes XGBoost and compares all four models. |
-| `06_evaluation(1).ipynb` | Reports final metrics and evaluates XGBoost errors by price band. |
+| `04_model_comparison.ipynb` | Compares the original Linear Regression, Decision Tree, and Random Forest models. |
+| `04_model_comparison_updated.ipynb` | Re-runs the three-model comparison with the updated feature set and time split. |
+| `05_advanced_models.ipynb` | Trains and manually tunes XGBoost and compares all four models. |
+| `06_evaluation.ipynb` | Reports final metrics and evaluates XGBoost errors by price band. |
 
 ## Setup
 
