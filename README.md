@@ -1,168 +1,111 @@
-# California Residential Property Close Price Prediction
+# California Residential Close Price Prediction
 
-This project develops and evaluates machine learning models for predicting the final sale price (`ClosePrice`) of single-family residential properties in California. It uses historical CRMLS sales records and follows a time-based validation strategy so that model performance is measured on later, unseen months.
+An end-to-end machine-learning project that predicts `ClosePrice` for California single-family homes using CRMLS records supplied through IDX Exchange. The workflow covers exploration, leakage-controlled preprocessing, chronological validation, feature engineering, advanced modeling, and segment-level evaluation.
 
-## Project Objectives
+The model is intended for pricing review and prioritization. It is not a formal appraisal and should not replace professional judgment.
 
-- Prepare and encode CRMLS property data for machine learning.
-- Establish a Linear Regression baseline.
-- Compare the baseline with Decision Tree and Random Forest regressors.
-- Engineer property-level and geographic features.
-- Tune an XGBoost regressor and compare it with the earlier models.
-- Evaluate performance with R-squared, MAE, MAPE, and MdAPE, including error analysis by price band.
+## Scope and evaluation design
 
-## Dataset
+The analysis includes only:
 
-The source data consists of monthly `CRMLSSold` files from the California Regional Multiple Listing Service (CRMLS), provided through IDX Exchange. The preprocessing notebook loads monthly files from January 2025 through May 2026 and restricts the analysis to:
+- `PropertyType = Residential`
+- `PropertySubType = SingleFamilyResidence`
+- transactions from May 2025 through June 2026
 
-```text
-PropertyType = Residential
-PropertySubType = SingleFamilyResidence
-```
+| Split | Period | Full rows | Primary in-range rows |
+|---|---|---:|---:|
+| Training | May 2025-April 2026 | 118,774 | 116,424 |
+| Validation | May 2026 | 11,984 | 11,735 |
+| Test | June 2026 | 12,827 | 12,543 |
 
-The prediction target is `ClosePrice`. Raw MLS files and prepared datasets are not included in this repository because they are externally provided and may be subject to access or licensing restrictions.
+The primary population uses the training set's 0.5th and 99.5th percentile limits for `ClosePrice` and price per square foot: $190,000-$8,750,000 and $164-$2,127 per square foot. The same frozen limits are applied to validation and test. Complete June performance is reported separately as a robustness check.
 
-The final modeling notebooks use the following chronological split:
+`ListPrice`, `OriginalListPrice`, target-derived predictors, identifiers, agent/office fields, and post-close information are excluded.
 
-| Split | Period | Observations before model-specific column removal |
-|---|---:|---:|
-| Training | May 2025-April 2026 | 117,602 |
-| Validation | May 2026 | 11,873 |
-| Test | June 2026 | 12,685 |
+## Weekly workflow
 
-Using later months for validation and testing provides a more realistic estimate of performance on future property sales than a random split.
+| Week | Notebook | Purpose | Detailed results |
+|---|---|---|---|
+| 2 | [`01_exploration.ipynb`](01_exploration.ipynb) | Explore data quality and distributions | [`docs/01_exploration_README.md`](docs/01_exploration_README.md) |
+| 3 | [`02_preprocessing.ipynb`](02_preprocessing.ipynb) | Prepare chronological model datasets | [`docs/02_preprocessing_README.md`](docs/02_preprocessing_README.md) |
+| 4 | [`03_baseline_model.ipynb`](03_baseline_model.ipynb) | Establish Dummy and Linear baselines | [`docs/03_baseline_model_README.md`](docs/03_baseline_model_README.md) |
+| 5 | [`04_model_comparison.ipynb`](04_model_comparison.ipynb) | Compare baseline model families | [`docs/04_model_comparison_README.md`](docs/04_model_comparison_README.md) |
+| 6 | [`03_baseline_model_updated.ipynb`](03_baseline_model_updated.ipynb) | Test engineered features with Linear Regression | [`docs/03_baseline_model_updated_README.md`](docs/03_baseline_model_updated_README.md) |
+| 6 | [`04_model_comparison_updated.ipynb`](04_model_comparison_updated.ipynb) | Test engineered features across models | [`docs/04_model_comparison_updated_README.md`](docs/04_model_comparison_updated_README.md) |
+| 7 | [`05_advanced_models.ipynb`](05_advanced_models.ipynb) | Tune XGBoost and select the final model | [`docs/05_advanced_models_README.md`](docs/05_advanced_models_README.md) |
+| 8 | [`06_evaluation.ipynb`](06_evaluation.ipynb) | Evaluate stability, segments, and review risk | [`docs/06_evaluation_README.md`](docs/06_evaluation_README.md) |
 
-## Data Preparation
+Week 6 intentionally uses two updated notebooks. Together they provide the required old-versus-new feature comparison, including the school-district layer.
 
-The preprocessing and modeling workflow includes:
+## Model progression
 
-1. Concatenating monthly CRMLS sales files.
-2. Filtering to residential single-family properties.
-3. Converting inconsistent binary values such as `True`, `False`, `Fals`, and missing values into numeric indicators.
-4. Converting date fields to datetime values.
-5. One-hot encoding selected low-cardinality categorical variables.
-6. Frequency encoding higher-cardinality location variables, including city, ZIP code, county, MLS area, and school district fields.
-7. Removing model-excluded identifiers, text fields, target-derived fields, and unstable audit columns.
-8. Dropping columns with more than 90% missingness in the training set.
-9. Filling remaining numeric missing values with training-set means and applying the same values to validation and test data to avoid leakage.
+### Original feature workflow
 
-## Feature Engineering
-
-The updated Week 6 workflow adds the following features:
-
-- **Bed/Bath Ratio:** bedrooms divided by bathrooms, with the bathroom denominator floored at one to prevent division by zero.
-- **Property Age:** current year minus `YearBuilt`, with negative values set to zero.
-- **Amenities Count:** sum of seven binary amenity indicators: view, waterfront, basement, private pool, attached garage, fireplace, and new construction.
-- **School District:** property coordinates are spatially joined to California school district boundaries. `DistrictName` is then frequency encoded for modeling; unmatched properties are assigned `Unknown District`.
-
-The geographic join requires `DistrictAreas.geojson`, derived from the California School District Areas 2024-25 boundary dataset.
-
-> **Experiment note:** the original and updated notebooks use different validation/test months in addition to different features. Their results therefore represent successive workflow versions, not a controlled estimate of the isolated causal effect of feature engineering.
-
-## Models Tested
-
-| Model | Main configuration |
-|---|---|
-| Linear Regression | Scikit-learn default configuration |
-| Decision Tree | `random_state=42` |
-| Random Forest | 100 trees, `random_state=42`, all CPU cores |
-| XGBoost | Manually tuned across tree depth, learning rate, and number of estimators |
-
-The selected XGBoost configuration uses `max_depth=7`, `learning_rate=0.05`, `n_estimators=300`, and `random_state=42`.
-
-## Final Results
-
-Results below come from the final feature set and chronological split.
-
-| Model | Validation R-squared | Test R-squared | Test MAE | Test MAPE | Test MdAPE |
-|---|---:|---:|---:|---:|---:|
-| Linear Regression | 0.6359 | -1.3633 | $576,815.78 | 62.89% | 27.16% |
-| Decision Tree | 0.7282 | 0.7178 | $256,101.42 | 18.98% | 11.96% |
-| Random Forest | 0.8738 | 0.8639 | **$179,154.00** | **13.55%** | **8.35%** |
-| XGBoost | **0.8785** | **0.8750** | $187,980.31 | 15.45% | 10.07% |
-
-XGBoost achieved the highest validation and test R-squared values and showed similar performance across both sets, indicating good generalization. Random Forest produced the lowest MAE, MAPE, and MdAPE. Consequently, the preferred model depends on the business objective: XGBoost explains slightly more overall price variation, while Random Forest gives lower typical prediction errors.
-
-The strongly negative test R-squared for Linear Regression indicates that its linear specification is not robust to the June 2026 test distribution and performs worse than predicting the test-set mean.
-
-## XGBoost Performance by Price Band
-
-| Actual close price | Test observations | MAE | MAPE | MdAPE |
+| Model | Validation R2 | Validation MdAPE | Primary June R2 | Primary June MdAPE |
 |---|---:|---:|---:|---:|
-| Under $500K | 1,742 | $85,410.85 | 23.46% | 12.98% |
-| $500K-$750K | 2,744 | $87,796.51 | 14.05% | 8.42% |
-| $750K-$1M | 2,579 | $115,203.57 | **13.11%** | 8.52% |
-| $1M-$1.5M | 2,559 | $176,174.12 | 14.20% | 10.14% |
-| $1.5M-$2M | 1,381 | $240,572.38 | 13.94% | 10.39% |
-| $2M+ | 1,680 | $544,441.00 | 16.20% | 13.27% |
+| Median Dummy | -0.1196 | 39.38% | -0.1138 | 39.38% |
+| Linear Regression | 0.6110 | 27.16% | 0.6205 | 26.97% |
+| Decision Tree | 0.8216 | 10.24% | 0.8220 | 10.20% |
+| Random Forest | **0.8872** | **7.82%** | **0.8847** | **8.01%** |
 
-XGBoost has its lowest MAPE in the $750K-$1M segment. Percentage error is highest below $500K, while absolute error is largest above $2M.
+Random Forest substantially outperforms the linear and single-tree baselines.
 
-## Repository Contents
+### Week 6 feature engineering
 
-| File | Purpose |
-|---|---|
-| `01_exploration.ipynb` | Dataset exploration and overview. |
-| `02_preprocessing_categorical_to_numerical.ipynb` | Loads monthly raw files, filters properties, converts categorical/binary fields, and prepares dates. |
-| `03_baseline_model.ipynb` | Trains and evaluates the original Linear Regression baseline. |
-| `03_baseline_model_updated.ipynb` | Re-runs the baseline after Week 6 feature engineering. |
-| `04_model_comparison.ipynb` | Compares the original Linear Regression, Decision Tree, and Random Forest models. |
-| `04_model_comparison_updated.ipynb` | Re-runs the three-model comparison with the updated feature set and time split. |
-| `05_advanced_models.ipynb` | Trains and manually tunes XGBoost and compares all four models. |
-| `06_evaluation.ipynb` | Reports final metrics and evaluates XGBoost errors by price band. |
+The expanded set adds bedroom-to-bathroom ratio, property age, living-area-to-lot-area ratio, amenity count, cyclical month features, and spatially assigned school district. District match coverage is 99.99% in training and 100% in validation and test.
 
-## Setup
+Feature engineering improves Linear Regression primary June R2 from 0.8465 to 0.8525 and MdAPE from 15.19% to 14.71%. In the controlled Random Forest experiment, however, the original set performs slightly better: primary June R2 is 0.8811 versus 0.8758. The engineered variables therefore add useful linear structure but do not automatically improve an already nonlinear model.
 
-The notebooks were developed in Google Colab with data mounted from Google Drive. Python 3.10 or later is recommended.
+### Advanced models
 
-Install the required packages:
+Time-ordered cross-validation selects XGBoost depth 7, learning rate 0.10, and 300 estimators.
 
-```bash
-python -m pip install jupyter pandas numpy scikit-learn xgboost geopandas shapely matplotlib seaborn
-```
+| Model | Validation R2 | Validation MAE | Validation MdAPE | Primary June R2 | Primary June MAE | Primary June MdAPE |
+|---|---:|---:|---:|---:|---:|---:|
+| Random Forest | 0.8757 | **$171,103** | **8.20%** | 0.8762 | **$170,135** | **8.23%** |
+| XGBoost | **0.8866** | $175,045 | 9.67% | **0.8906** | $174,249 | 9.68% |
 
-Before running the notebooks, provide:
+XGBoost has higher R2 and lower RMSE, while Random Forest has lower MAE, MAPE, and MdAPE. Because validation MdAPE is the predefined primary selection metric, Random Forest is selected as the final model.
 
-- the monthly `CRMLSSoldYYYYMM.csv` source files;
-- the prepared chronological train, validation, and test CSV files referenced by the modeling notebooks; and
-- `DistrictAreas.geojson` for school-district spatial joins.
+## Final Random Forest evaluation
 
-Update the hard-coded Colab paths, such as `/content/drive/My Drive/IDX Exchange/Data/`, to match your own environment.
+| Population | Rows | R2 | MAE | RMSE | MAPE | MdAPE | Within 20% |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Validation | 11,735 | 0.8757 | $171,103 | $334,436 | 12.72% | 8.20% | 81.3% |
+| Primary June | 12,543 | **0.8762** | **$170,135** | $335,700 | 12.77% | 8.23% | 81.1% |
+| Full June robustness | 12,827 | 0.5999 | $231,306 | $955,058 | 22.72% | 8.48% | 79.4% |
 
-## Reproducing the Analysis
+Validation and primary June are highly stable: R2 changes by +0.0004 and MdAPE by only +0.03 percentage points. Complete-June R2 and RMSE deteriorate because a small number of unusual transactions generate very large squared errors, while the typical proportional error remains much more stable.
 
-Run the notebooks in the following order:
+## Segment findings
 
-1. `01_exploration.ipynb`
-2. `02_preprocessing_categorical_to_numerical.ipynb`
-3. `03_baseline_model.ipynb`
-4. `04_model_comparison.ipynb`
-5. `03_baseline_model_updated.ipynb`
-6. `04_model_comparison_updated.ipynb`
-7. `05_advanced_models.ipynb`
-8. `06_evaluation.ipynb`
+- The $500K-$750K band has the lowest MdAPE at 6.05%.
+- The $750K-$1M band has the lowest MAPE at 10.10% and 87.9% of predictions within 20%.
+- Properties above $2M have MAE of $538,028 and MdAPE of 13.31%.
+- Merced, Riverside, and San Bernardino have the lowest county-level MdAPE among counties with at least 100 test rows.
+- Santa Cruz has the highest qualifying county MdAPE at 20.76%.
+- Underpredictions represent 47.9% and overpredictions 52.1%, indicating limited aggregate directional imbalance.
 
-For local Jupyter:
+## Reproduction
+
+Python 3.10 or later is recommended.
 
 ```bash
-jupyter lab
+python -m pip install -r requirements.txt
+python -m pip install jupyter geopandas shapely matplotlib seaborn
 ```
 
-Open each notebook, update its data paths, and select **Run All**. The advanced and evaluation notebooks repeat earlier preparation steps so they can be executed independently once the required prepared CSVs and geographic boundary file are available.
+Provide the monthly `CRMLSSoldYYYYMM.csv` files and the California school-district boundary file, update the configuration paths, and run the notebooks in table order. Raw CRMLS data and trained artifacts are not committed because they are externally provided and may be subject to licensing restrictions.
 
-## Prediction Application
+## Limitations
 
-A Streamlit application was optional in Week 9 and is not included in the current project files. If an application is added later, it should load a saved preprocessing pipeline and trained model, apply the same feature transformations used during training, and return a predicted close price from user-provided property characteristics.
+- Full-market performance is weaker for luxury and unusual transactions.
+- One validation month and one test month are insufficient for production approval.
+- School-district membership is geographic context, not a causal measure of school quality.
+- `FireplacesTotal` was entirely missing in this run and was skipped by the imputer.
+- Frequency and one-hot encodings can lose information for rare locations.
+- Model performance should be monitored as inventory and market conditions change.
 
-## Limitations and Next Steps
+## Business recommendation
 
-- Model performance may change over time as California housing conditions shift.
-- Percentage errors are not uniform across price bands.
-- School-district frequency is a useful geographic proxy but does not directly represent school quality or causal effects on price.
-- Preprocessing is repeated across notebooks; packaging it into a fitted Scikit-learn pipeline would reduce inconsistency and leakage risk.
-- A future controlled experiment should keep the same train/validation/test months when measuring the incremental contribution of new features.
-- Saving the final model, preprocessing objects, and feature schema would support reproducible batch predictions or a Streamlit application.
-
-## Tools and Libraries
-
-Python, pandas, NumPy, scikit-learn, XGBoost, GeoPandas, Shapely, Matplotlib, Seaborn, Jupyter, and Google Colab.
+Use Random Forest as decision support for typical single-family homes, particularly in the $500K-$1M range. Route luxury homes, sparse geographies, unusual configurations, and predictions with elevated estimated risk to manual comparable-sales review.
