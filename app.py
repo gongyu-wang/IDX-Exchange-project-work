@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import joblib
@@ -8,8 +9,13 @@ import streamlit as st
 
 
 ROOT = Path(__file__).resolve().parent
-MODEL_PATH = ROOT / "trained_pipeline.joblib"
-DATA_PATH = ROOT / "crmls_sfr_quality_cleaned_202501_202605.csv"
+MODEL_PATH = Path(os.getenv("IDX_MODEL_PATH", ROOT / "artifacts" / "app_model.joblib"))
+DATA_PATH = Path(
+    os.getenv(
+        "IDX_DATA_PATH",
+        ROOT / "data" / "crmls_sfr_quality_cleaned_202501_202605.csv",
+    )
+)
 
 REQUIRED_COLUMNS = [
     "LivingArea",
@@ -32,7 +38,13 @@ st.set_page_config(
 def load_model():
     if not MODEL_PATH.exists():
         return None
-    return joblib.load(MODEL_PATH)
+    try:
+        artifact = joblib.load(MODEL_PATH)
+    except Exception as error:
+        return {"load_error": str(error)}
+    if isinstance(artifact, dict) and "pipeline" in artifact:
+        return artifact
+    return {"pipeline": artifact, "metrics": {}, "metadata": {}}
 
 
 @st.cache_data
@@ -73,6 +85,17 @@ def money(value):
     return f"${value:,.0f}"
 
 
+def normalize_postal_code(value):
+    """Return a five-character ZIP string without failing on mixed CSV values."""
+    if pd.isna(value):
+        return None
+    text = str(value).strip()
+    if text.endswith(".0"):
+        text = text[:-2]
+    digits = "".join(character for character in text if character.isdigit())
+    return digits[:5].zfill(5) if digits else None
+
+
 def page_title(title, description):
     st.title(title)
     st.caption(description)
@@ -90,13 +113,35 @@ def prediction_page(data):
         "Enter the property characteristics to estimate its likely closing price.",
     )
 
-    model = load_model()
-    if model is None:
-        st.error(
-            "trained_pipeline.joblib was not found. Put the saved deployment pipeline "
-            "in the same folder as app.py."
+    artifact = load_model()
+    if artifact is None:
+        st.error("The deployable model has not been built yet.")
+        st.code(
+            "python train_app_model.py --data path/to/crmls_sfr_quality_cleaned_202501_202605.csv",
+            language="bash",
         )
+        st.caption(f"Expected model location: {MODEL_PATH}")
         return
+
+    if "load_error" in artifact:
+        st.error("The model file exists but could not be loaded.")
+        st.code(artifact["load_error"])
+        st.caption("Rebuild it with train_app_model.py using the current requirements.")
+        return
+
+    model = artifact["pipeline"]
+    metrics = artifact.get("metrics", {})
+    metadata = artifact.get("metadata", {})
+
+    if metrics:
+        metric_columns = st.columns(3)
+        metric_columns[0].metric("Validation R²", f"{metrics.get('r2', float('nan')):.3f}")
+        metric_columns[1].metric("Validation MAE", money(metrics.get("mae")))
+        metric_columns[2].metric("Validation MdAPE", f"{metrics.get('mdape', float('nan')):.1f}%")
+        st.caption(
+            f"Deployment model: {metadata.get('model_name', 'trained pipeline')} · "
+            f"Validation month: {metadata.get('test_month', 'not recorded')}"
+        )
 
     with st.form("prediction_form"):
         st.subheader("Required property information")
@@ -149,7 +194,9 @@ def prediction_page(data):
                 zip_values = []
                 if "PostalCode" in zip_data.columns:
                     zip_values = sorted(
-                        zip_data["PostalCode"].dropna().astype(int).astype(str).unique().tolist()
+                        value
+                        for value in zip_data["PostalCode"].map(normalize_postal_code).unique()
+                        if value
                     )
                 postal_code = st.selectbox("ZIP code", ["Not specified"] + zip_values)
 
@@ -164,7 +211,7 @@ def prediction_page(data):
                 "LotSizeSquareFeet": [lot_size],
                 "City": [None if city in (None, "Not specified") else city],
                 "CountyOrParish": [None if county in (None, "Not specified") else county],
-                "PostalCode": [None if postal_code in (None, "Not specified") else str(postal_code)],
+                "PostalCode": [None if postal_code in (None, "Not specified") else postal_code],
             }
         )
 
@@ -284,7 +331,7 @@ def geographic_page(data):
         for p in percentile
     ]
     zip_summary["Radius"] = np.sqrt(zip_summary["Homes"]) * 500
-    zip_summary["ZIP"] = zip_summary["PostalCode"].astype(int).astype(str).str.zfill(5)
+    zip_summary["ZIP"] = zip_summary["PostalCode"].map(normalize_postal_code)
     zip_summary["MedianPriceLabel"] = zip_summary["MedianPrice"].map(money)
     zip_summary["MedianPPSFLabel"] = zip_summary["MedianPPSF"].map(money)
 
@@ -388,6 +435,8 @@ page = st.sidebar.radio(
 )
 st.sidebar.divider()
 st.sidebar.caption("CRMLS single-family residential analysis")
+st.sidebar.caption(f"Model: {'ready' if MODEL_PATH.exists() else 'missing'}")
+st.sidebar.caption(f"Data: {'ready' if DATA_PATH.exists() else 'missing'}")
 
 if page == "Home Price Prediction":
     prediction_page(data)
